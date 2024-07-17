@@ -1,0 +1,105 @@
+
+
+local customName = "dot lock"
+local tool = Instance.new("Tool")
+tool.RequiresHandle = false
+tool.Name = customName
+
+local function notify(message)
+    game.StarterGui:SetCore("SendNotification", {
+        Title = "dot lock";
+        Text = message;
+        Duration = 5;
+    })
+end
+
+local function findNearestPlayer()
+    local players = game.Players:GetPlayers()
+    local localPlayer = game.Players.LocalPlayer
+    local camera = workspace.CurrentCamera
+    local nearestPlayer = nil
+    local nearestDistance = math.huge
+    
+    for _, player in ipairs(players) do
+        if player ~= localPlayer and player.Character and player.Character:FindFirstChild(getgenv().dotLockSettings.HitPart) then
+            local character = player.Character
+            local screenPoint = camera:WorldToScreenPoint(character[getgenv().dotLockSettings.HitPart].Position)
+            local distance = (Vector2.new(screenPoint.X, screenPoint.Y) - Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)).Magnitude
+            
+            if distance < nearestDistance then
+                nearestDistance = distance
+                nearestPlayer = player
+            end
+        end
+    end
+    
+    return nearestPlayer
+end
+
+local function createBillboardGui(target)
+    if target and target.Character and target.Character:FindFirstChild(getgenv().dotLockSettings.HitPart) then
+        local billboard = Instance.new("BillboardGui")
+        billboard.Adornee = target.Character[getgenv().dotLockSettings.HitPart]
+        billboard.Size = UDim2.new(4, 0, 4, 0)
+        billboard.AlwaysOnTop = true
+
+        local frame = Instance.new("Frame", billboard)
+        frame.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+        frame.Size = UDim2.new(1, 0, 1, 0)
+
+        local uiCorner = Instance.new("UICorner", frame)
+        uiCorner.CornerRadius = UDim.new(0, 12)
+
+        return billboard
+    end
+end
+
+local lockTarget = nil
+tool.Activated:Connect(function()
+    if lockTarget then
+        notify("dot lock: Unlocked from " .. lockTarget.DisplayName)
+        lockTarget = nil
+    else
+        lockTarget = findNearestPlayer()
+        if lockTarget then
+            notify("dot lock: Locked on to " .. lockTarget.DisplayName)
+            local billboard = createBillboardGui(lockTarget)
+            if billboard then
+                billboard.Parent = lockTarget.Character[getgenv().dotLockSettings.HitPart]
+            end
+        end
+    end
+end)
+
+game.Players.LocalPlayer.CharacterAdded:Connect(function(character)
+    if lockTarget and lockTarget.Character and lockTarget.Character:FindFirstChild(getgenv().dotLockSettings.HitPart) then
+        local billboard = createBillboardGui(lockTarget)
+        if billboard then
+            billboard.Parent = lockTarget.Character[getgenv().dotLockSettings.HitPart]
+        end
+    end
+end)
+
+game.Players.LocalPlayer.CharacterRemoving:Connect(function()
+    if lockTarget and lockTarget.Character and lockTarget.Character:FindFirstChild(getgenv().dotLockSettings.HitPart) then
+        local gui = lockTarget.Character[getgenv().dotLockSettings.HitPart]:FindFirstChildOfClass("BillboardGui")
+        if gui then
+            gui:Destroy()
+        end
+    end
+end)
+
+local mt = getrawmetatable(game)
+local old = mt.__namecall
+setreadonly(mt, false)
+mt.__namecall = newcclosure(function(...)
+    local args = {...}
+    if getgenv().dotLockSettings.Enabled and lockTarget ~= nil and lockTarget.Character and getnamecallmethod() == "FireServer" and args[2] == "MOUSE" then
+        args[3] = lockTarget.Character[getgenv().dotLockSettings.HitPart].Position + (lockTarget.Character[getgenv().dotLockSettings.HitPart].Velocity * getgenv().dotLockSettings.Prediction)
+        return old(unpack(args))
+    end
+    return old(...)
+end)
+setreadonly(mt, true)
+
+tool.Parent = game.Players.LocalPlayer.Backpack
